@@ -201,6 +201,10 @@ func GetBuild(id string, job Job) (Build, error) {
 	startedTime := time.Unix(started.Timestamp, 0)
 	b.Started = &startedTime
 
+	// When the build is still running, there is no "finished.json" file.  But
+	// the GET will succeed with a 200 status code.  We have to try and parse
+	// the returned bytes as JSON before we know that there is a valid file.
+
 	finishedBytes, err := FetchRemoteFile(fmt.Sprintf("%s/finished.json", buildUrl))
 	if err != nil {
 		return Build{}, fmt.Errorf("failed to fetch a remote file: %w", err)
@@ -209,15 +213,13 @@ func GetBuild(id string, job Job) (Build, error) {
 	var finished Finished
 	err = json.Unmarshal(finishedBytes, &finished)
 
-	if err != nil {
-		return Build{}, err
+	if err == nil {
+		finishedTime := time.Unix(finished.Timestamp, 0)
+		b.Finished = &finishedTime
+
+		b.Passed = finished.Passed
+		b.Result = finished.Result
 	}
-
-	finishedTime := time.Unix(finished.Timestamp, 0)
-	b.Finished = &finishedTime
-
-	b.Passed = finished.Passed
-	b.Result = finished.Result
 
 	return b, nil
 }
