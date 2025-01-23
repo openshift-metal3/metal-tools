@@ -168,6 +168,10 @@ func FetchRemoteFile(url string) ([]byte, error) {
 	}
 	defer r.Body.Close()
 
+	if r.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("received HTTP %d from %s", r.StatusCode, url)
+	}
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return nil, err
@@ -184,7 +188,7 @@ func GetBuild(id string, job Job) (Build, error) {
 
 	startedBytes, err := FetchRemoteFile(fmt.Sprintf("%s/started.json", buildUrl))
 	if err != nil {
-		return Build{}, err
+		return Build{}, fmt.Errorf("failed to fetch a remote file: %w", err)
 	}
 
 	var started Started
@@ -199,7 +203,7 @@ func GetBuild(id string, job Job) (Build, error) {
 
 	finishedBytes, err := FetchRemoteFile(fmt.Sprintf("%s/finished.json", buildUrl))
 	if err != nil {
-		return Build{}, err
+		return Build{}, fmt.Errorf("failed to fetch a remote file: %w", err)
 	}
 
 	var finished Finished
@@ -237,7 +241,7 @@ func GetAllBuilds(job Job) ([]Build, error) {
 	buildIds, err := FetchAllBuildIds(job)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch build ids: %w", err)
 	}
 
 	for i, id := range buildIds {
@@ -248,7 +252,7 @@ func GetAllBuilds(job Job) ([]Build, error) {
 		b, err := GetBuild(id, job)
 
 		if err != nil {
-			return builds, err
+			return builds, fmt.Errorf("failed to get a build: %w", err)
 		}
 
 		if !b.IsFinished() {
