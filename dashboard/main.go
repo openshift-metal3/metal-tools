@@ -46,26 +46,23 @@ var red = lipgloss.NewStyle().Background(lipgloss.Color("#dc2626"))
 var border = lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).Padding(1)
 var selectedBorder = lipgloss.NewStyle().BorderStyle(lipgloss.ThickBorder()).Padding(1)
 
-type Started struct {
-	Timestamp int64 `json:"timestamp"`
-}
-
-type Finished struct {
-	Timestamp int64  `json:"timestamp"`
-	Passed    bool   `json:"passed"`
-	Result    string `json:"result"`
-	Revision  string `json:"revision"`
+// ProwBuild represents the `prowjob.json` file
+type ProwBuild struct {
+	Status Build `json:"status"`
 }
 
 type Build struct {
-	ID       string     `json:"id"`
-	Started  *time.Time `json:"started"`
-	Finished *time.Time `json:"finished"`
-	Passed   bool       `json:"passed"`
-	Result   string     `json:"result"`
+	ID       string     `json:"build_id"`
+	Started  *time.Time `json:"startTime"`
+	Finished *time.Time `json:"completionTime"`
+	State    string     `json:"state"`
 }
 
-func (b *Build) IsFinished() bool {
+func (b Build) Passed() bool {
+	return b.State == "success"
+}
+
+func (b Build) IsFinished() bool {
 	return b.Finished != nil
 }
 
@@ -181,47 +178,23 @@ func FetchRemoteFile(url string) ([]byte, error) {
 }
 
 func GetBuild(id string, job Job) (Build, error) {
-	buildUrl := fmt.Sprintf("%s/%s/%s", baseArtifactsUrl, job.Name, id)
-	b := Build{
-		ID: id,
-	}
+	buildUrl := fmt.Sprintf("%s/%s/%s", baseArtifactsUrl, job.ProwName, id)
 
-	startedBytes, err := FetchRemoteFile(fmt.Sprintf("%s/started.json", buildUrl))
+	bs, err := FetchRemoteFile(fmt.Sprintf("%s/prowjob.json", buildUrl))
+
 	if err != nil {
 		return Build{}, fmt.Errorf("failed to fetch a remote file: %w", err)
 	}
 
-	var started Started
+	var prowBuild ProwBuild
 
-	err = json.Unmarshal(startedBytes, &started)
+	err = json.Unmarshal(bs, &prowBuild)
+
 	if err != nil {
 		return Build{}, err
 	}
 
-	startedTime := time.Unix(started.Timestamp, 0)
-	b.Started = &startedTime
-
-	// When the build is still running, there is no "finished.json" file.  But
-	// the GET will succeed with a 200 status code.  We have to try and parse
-	// the returned bytes as JSON before we know that there is a valid file.
-
-	finishedBytes, err := FetchRemoteFile(fmt.Sprintf("%s/finished.json", buildUrl))
-	if err != nil {
-		return Build{}, fmt.Errorf("failed to fetch a remote file: %w", err)
-	}
-
-	var finished Finished
-	err = json.Unmarshal(finishedBytes, &finished)
-
-	if err == nil {
-		finishedTime := time.Unix(finished.Timestamp, 0)
-		b.Finished = &finishedTime
-
-		b.Passed = finished.Passed
-		b.Result = finished.Result
-	}
-
-	return b, nil
+	return prowBuild.Status, nil
 }
 
 func FetchAllBuildIds(job Job) (buildIds []string, err error) {
@@ -722,7 +695,7 @@ func (m model) View() string {
 			}
 
 			for _, build := range builds {
-				if build.Passed {
+				if build.Passed() {
 					b += green.Render(" ")
 				} else {
 					b += red.Render(" ")
