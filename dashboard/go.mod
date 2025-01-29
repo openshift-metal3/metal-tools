@@ -1,6 +1,6 @@
 module github.com/openshift-metal3/metal-tools/dashboard
 
-go 1.22
+go 1.22.0
 
 require (
 	github.com/adrg/xdg v0.5.3
